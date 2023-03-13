@@ -13,26 +13,6 @@
 
 (def ^:const output-stream-buffer-size (* 1024 1024))
 
-(comment
-(defonce my-conn-pool   (car/connection-pool {})) ; Create a new stateful pool
-(def     my-conn-spec-1 {:uri "redis://localhost:9475/"})
-
-(def my-wcar-opts
-  {:pool my-conn-pool
-   :spec my-conn-spec-1})
-
-(wcar my-wcar-opts (car/ping))
-
-(wcar my-wcar-opts (car/set "foo" "bar"))
-
-(wcar my-wcar-opts (car/exists "foo"))
-
-(wcar my-wcar-opts (car/copy "foo" "bar"))
-
-(wcar my-wcar-opts (car/keys "*"))
-
-)
-
 (defn redis-client
   [opts]
   {:pool (car/connection-pool (or (:pool opts) {}))
@@ -42,7 +22,7 @@
   (wcar client (car/set key bytes)))
 
 (defn get-object [client key]
-  (wcar client (car/get key)) )
+  (wcar client (car/get key)))
 
 (defn exists? [client key]
   (pos? (wcar client (car/exists key))))
@@ -56,8 +36,7 @@
   (let [val (wcar client (car/get source-key))]
     (wcar client
           (car/set destination-key val)
-          (car/del source-key)))
-  )
+          (car/del source-key))))
 
 (defn delete [client key]
   (wcar client (car/del key)))
@@ -161,9 +140,9 @@
   (-delete-store [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try-
-                    (info "Deleting the store is done by deleting all keys.")
-                    (doseq [key (list-objects client)]
-                      (delete client key)))))
+                 (info "Deleting the store is done by deleting all keys.")
+                 (doseq [key (list-objects client)]
+                   (delete client key)))))
   (-keys [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try- (list-objects client)))))
