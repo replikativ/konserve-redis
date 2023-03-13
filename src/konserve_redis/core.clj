@@ -41,14 +41,12 @@
 (defn delete [client key]
   (wcar client (car/del key)))
 
-(def ^:const default-bucket "konserve")
-
 (extend-protocol PBackingLock
   Boolean
   (-release [_ env]
     (if (:sync? env) nil (go-try- nil))))
 
-(defrecord RedisBlob [bucket key data fetched-object]
+(defrecord RedisBlob [store key data fetched-object]
   PBackingBlob
   (-sync [_ env]
     (async+sync (:sync? env) *default-sync-translation*
@@ -59,7 +57,7 @@
                                (.write baos header)
                                (.write baos meta)
                                (.write baos value)
-                               (put-object (:client bucket)
+                               (put-object (:client store)
                                            key
                                            (.toByteArray baos))
                                (.close baos))
@@ -75,7 +73,7 @@
                 (go-try-
                     ;; first access is always to header, after it is cached
                  (when-not @fetched-object
-                   (reset! fetched-object (get-object (:client bucket) key)))
+                   (reset! fetched-object (get-object (:client store) key)))
                  (Arrays/copyOfRange ^bytes @fetched-object (int 0) (int header-size)))))
   (-read-meta [_ meta-size env]
     (async+sync (:sync? env) *default-sync-translation*
