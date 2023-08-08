@@ -16,7 +16,8 @@
 (defn redis-client
   [opts]
   {:pool (car/connection-pool (or (:pool opts) {}))
-   :spec {:uri (:uri opts)}})
+   :spec {:uri (:uri opts)
+          :ssl-fn :default}})
 
 (defn put-object [client ^String key ^bytes bytes]
   (wcar client (car/set key bytes)))
