@@ -164,8 +164,9 @@
 (defn release
   "Must be called after work on database has finished in order to close connection"
   [store env]
-  (async+sync (:sync? env) *default-sync-translation*
-              (go-try- (.close (:pool (:client (:backing store)))))))
+  (when-let [pool (-> store :backing :client :pool)]
+    (async+sync (:sync? env) *default-sync-translation*
+                (go-try- (.close pool)))))
 
 (defn delete-store [redis-spec & {:keys [opts]}]
   (let [complete-opts (merge {:sync? true} opts)
