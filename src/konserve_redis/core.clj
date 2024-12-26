@@ -14,10 +14,12 @@
 (def ^:const output-stream-buffer-size (* 1024 1024))
 
 (defn redis-client
-  [opts]
-  {:pool (car/connection-pool (or (:pool opts) {}))
-   :spec {:uri (:uri opts)
-          :ssl-fn :default}})
+  [{:keys [pool uri]}]
+  (merge
+   {:spec {:uri uri
+           :ssl-fn :default}}
+   (when pool
+     {:pool (car/connection-pool pool)})))
 
 (defn put-object [client ^String key ^bytes bytes]
   (wcar client (car/set key bytes)))
