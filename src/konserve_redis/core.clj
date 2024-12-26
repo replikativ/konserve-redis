@@ -15,11 +15,11 @@
 
 (defn redis-client
   [{:keys [pool ssl-fn uri]}]
-  (merge
-   {:spec {:uri uri
-           :ssl-fn ssl-fn}}
-   (when pool
-     {:pool (car/connection-pool pool)})))
+  (merge {:spec (merge {:uri uri}
+                       (when-not (= ssl-fn :none)
+                         {:ssl-fn (or ssl-fn :default)}))}
+         (when-not (= pool :none)
+           {:pool (car/connection-pool (or pool {}))})))
 
 (defn put-object [client ^String key ^bytes bytes]
   (wcar client (car/set key bytes)))

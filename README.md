@@ -19,8 +19,10 @@ For asynchronous execution take a look at the [konserve example](https://github.
 
 (def redis-spec
   {:uri "redis://localhost:6379/"
-   ;; Use `:ssl-fn :default` when Redis requires SSL, otherwise omit.
-   :ssl-fn :default})
+   ;; Connection pools are used by default, use `:pool :none` to disable.
+   :pool :none
+   ;; Redis is assumed to require SSL, use `:ssl-fn :none` to disable.
+   :ssl-fn :none})
 
 (def store (connect-store redis-spec :opts {:sync? true}))
 
