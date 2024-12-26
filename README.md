@@ -18,7 +18,7 @@ For asynchronous execution take a look at the [konserve example](https://github.
          '[konserve.core :as k])
 
 (def redis-spec
-  {:uri "redis://localhost:9475/"})
+  {:uri "redis://localhost:6379/"})
 
 (def store (connect-store redis-spec :opts {:sync? true}))
 

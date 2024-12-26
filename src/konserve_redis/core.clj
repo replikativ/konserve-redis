@@ -174,7 +174,7 @@
 
   (require '[konserve.core :as k])
 
-  (def redis-spec {:uri "redis://localhost:9475/"})
+  (def redis-spec {:uri "redis://localhost:6379/"})
 
   (def test-client (redis-client redis-spec))
 
