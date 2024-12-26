@@ -14,10 +14,10 @@
 (def ^:const output-stream-buffer-size (* 1024 1024))
 
 (defn redis-client
-  [{:keys [pool uri]}]
+  [{:keys [pool ssl-fn uri]}]
   (merge
    {:spec {:uri uri
-           :ssl-fn :default}}
+           :ssl-fn ssl-fn}}
    (when pool
      {:pool (car/connection-pool pool)})))
 
