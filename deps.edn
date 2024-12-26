@@ -18,4 +18,6 @@
                            babashka/babashka.curl                 {:mvn/version "0.1.2"}
                            babashka/fs                            {:mvn/version "0.1.6"}
                            cheshire/cheshire                      {:mvn/version "5.10.2"}}
-                    :ns-default build}}}
+                    :ns-default build}
+           :outdated {:deps {com.github.liquidz/antq {:mvn/version "2.11.1260"}}
+                      :main-opts ["-m" "antq.core"]}}}
