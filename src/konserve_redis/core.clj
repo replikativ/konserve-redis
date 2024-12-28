@@ -155,9 +155,9 @@
         config (merge {:opts               complete-opts
                        :config             {:sync-blob? false
                                             :in-place? true
-                                            :no-update? true
+                                            :no-backup? true
                                             :lock-blob? false}
-                       :default-serializer :FressianSerializer
+                       :default-serializer :FressianSerializr
                        :buffer-size        (* 1024 1024)}
                       (dissoc params :opts :config))]
     (connect-default-store backing config)))
