@@ -14,13 +14,17 @@ Add to your dependencies:
 For asynchronous execution take a look at the [konserve example](https://github.com/replikativ/konserve#asynchronous-execution).
 
 ``` clojure
-(require '[konserve-redis.core :refer [connect-redis-store]]
+(require '[konserve-redis.core :refer [connect-store]]
          '[konserve.core :as k])
 
 (def redis-spec
-  {:uri "redis://localhost:9475/"})
+  {:uri "redis://localhost:6379/"
+   ;; Connection pools are used by default, use `:pool :none` to disable.
+   :pool :none
+   ;; Redis is assumed to require SSL, use `:ssl-fn :none` to disable.
+   :ssl-fn :none})
 
-(def store (connect-redis-store redis-spec :opts {:sync? true}))
+(def store (connect-store redis-spec :opts {:sync? true}))
 
 (k/assoc-in store ["foo" :bar] {:foo "baz"} {:sync? true})
 (k/get-in store ["foo"] nil {:sync? true})

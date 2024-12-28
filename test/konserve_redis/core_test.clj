@@ -4,7 +4,7 @@
             [konserve.compliance-test :refer [compliance-test]]
             [konserve-redis.core :refer [connect-store release delete-store]]))
 
-(def redis-spec {:uri "redis://localhost:9475/"})
+(def redis-spec {:uri "redis://localhost:6379/"})
 
 (deftest redis-compliance-sync-test
   (let [redis-spec (assoc redis-spec :bucket "konserve-redis-sync-test")
@@ -23,4 +23,3 @@
       (compliance-test store))
     (<!! (release store {:sync? false}))
     (<!! (delete-store redis-spec :opts {:sync? false}))))
-

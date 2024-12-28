@@ -14,10 +14,12 @@
 (def ^:const output-stream-buffer-size (* 1024 1024))
 
 (defn redis-client
-  [opts]
-  {:pool (car/connection-pool (or (:pool opts) {}))
-   :spec {:uri (:uri opts)
-          :ssl-fn :default}})
+  [{:keys [pool ssl-fn uri]}]
+  (merge {:spec (merge {:uri uri}
+                       (when-not (= ssl-fn :none)
+                         {:ssl-fn (or ssl-fn :default)}))}
+         (when-not (= pool :none)
+           {:pool (car/connection-pool (or pool {}))})))
 
 (defn put-object [client ^String key ^bytes bytes]
   (wcar client (car/set key bytes)))
@@ -162,8 +164,9 @@
 (defn release
   "Must be called after work on database has finished in order to close connection"
   [store env]
-  (async+sync (:sync? env) *default-sync-translation*
-              (go-try- (.close (:pool (:client (:backing store)))))))
+  (when-let [pool (-> store :backing :client :pool)]
+    (async+sync (:sync? env) *default-sync-translation*
+                (go-try- (.close pool)))))
 
 (defn delete-store [redis-spec & {:keys [opts]}]
   (let [complete-opts (merge {:sync? true} opts)
@@ -174,7 +177,7 @@
 
   (require '[konserve.core :as k])
 
-  (def redis-spec {:uri "redis://localhost:9475/"})
+  (def redis-spec {:uri "redis://localhost:6379/"})
 
   (def test-client (redis-client redis-spec))
 
