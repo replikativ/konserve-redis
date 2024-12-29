@@ -153,10 +153,10 @@
   (let [complete-opts (merge {:sync? true} opts)
         backing (RedisStore. (redis-client redis-spec))
         config (merge {:opts               complete-opts
-                       :config             {:sync-blob? false
+                       :config             {:sync-blob? true
                                             :in-place? true
                                             :no-backup? true
-                                            :lock-blob? false}
+                                            :lock-blob? true}
                        :default-serializer :FressianSerializr
                        :buffer-size        (* 1024 1024)}
                       (dissoc params :opts :config))]
