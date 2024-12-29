@@ -56,6 +56,6 @@ feature, please let us know.
 
 ## License
 
-Copyright © 2023 Christian Weilbach
+Copyright © 2023-2024 Christian Weilbach, Tom Vaughan
 
 Licensed under Eclipse Public License (see [LICENSE](LICENSE)).

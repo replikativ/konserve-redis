@@ -157,7 +157,7 @@
                                             :in-place? true
                                             :no-backup? true
                                             :lock-blob? true}
-                       :default-serializer :FressianSerializr
+                       :default-serializer :FressianSerializer
                        :buffer-size        (* 1024 1024)}
                       (dissoc params :opts :config))]
     (connect-default-store backing config)))
