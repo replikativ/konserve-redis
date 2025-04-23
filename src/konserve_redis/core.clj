@@ -147,7 +147,7 @@
   (-keys [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try- (list-objects client))))
-                
+
   PMultiWriteBackingStore
   (-multi-write-blobs
     [_ store-key-values env]
@@ -156,36 +156,36 @@
                  (try
                    ;; Execute all writes in a single Redis transaction
                    (let [commands (for [[store-key data] store-key-values
-                                       :let [{:keys [header meta value]} data
-                                             baos (ByteArrayOutputStream. output-stream-buffer-size)]]
-                                   (do
-                                     (.write baos header)
-                                     (.write baos meta)
-                                     (.write baos value)
-                                     (let [bytes (.toByteArray baos)]
-                                       (.close baos)
-                                       [store-key bytes])))
-                         
+                                        :let [{:keys [header meta value]} data
+                                              baos (ByteArrayOutputStream. output-stream-buffer-size)]]
+                                    (do
+                                      (.write baos header)
+                                      (.write baos meta)
+                                      (.write baos value)
+                                      (let [bytes (.toByteArray baos)]
+                                        (.close baos)
+                                        [store-key bytes])))
+
                          ;; Execute the Redis MULTI/EXEC transaction
                          _ (wcar client
-                               (car/multi)
-                               (doseq [[store-key bytes] commands]
-                                 (car/set store-key bytes))
-                               (car/exec))
-                         
+                                 (car/multi)
+                                 (doseq [[store-key bytes] commands]
+                                   (car/set store-key bytes))
+                                 (car/exec))
+
                          ;; If we get here, all writes succeeded
                          ;; Create a result map with all keys mapping to true
                          results (into {} (map (fn [[store-key _]] [store-key true]) store-key-values))]
-                     
+
                      results)
-                   
+
                    ;; Handle any transaction errors
                    (catch Exception e
                      (warn "Redis transaction failed:" (.getMessage e))
                      (throw (ex-info "Redis transaction failed"
-                                    {:type :not-supported
-                                     :reason "Transaction failed"
-                                     :cause e}))))))))
+                                     {:type :not-supported
+                                      :reason "Transaction failed"
+                                      :cause e}))))))))
 
 (defn connect-store [redis-spec & {:keys [opts]
                                    :as params}]
@@ -250,19 +250,19 @@
   (k/bget store :binbar (fn [{:keys [input-stream]}]
                           (map byte (slurp input-stream)))
           {:sync? true})
-          
+
   ;; Multi-key atomic operations example
-  (k/multi-assoc store 
+  (k/multi-assoc store
                  {:user1 {:name "Alice" :role "admin"}
                   :user2 {:name "Bob" :role "user"}
                   :config {:version "1.0"}}
                  {:sync? true})
-                 
+
   ;; Get the values
   (k/get store :user1 nil {:sync? true})
   (k/get store :user2 nil {:sync? true})
   (k/get store :config nil {:sync? true})
-  
+
   ;; Clean up
   (k/dissoc store :user1 {:sync? true})
   (k/dissoc store :user2 {:sync? true})
@@ -300,22 +300,22 @@
   (<!! (k/bget store :binbar (fn [{:keys [input-stream]}]
                                (map byte (slurp input-stream)))
                {:sync? false}))
-               
+
   ;; Multi-key atomic operations example (async)
-  (<!! (k/multi-assoc store 
+  (<!! (k/multi-assoc store
                       {:user1 {:name "Alice" :role "admin"}
                        :user2 {:name "Bob" :role "user"}
                        :config {:version "1.0"}}
                       {:sync? false}))
-                      
+
   ;; Get the values
   (<!! (k/get store :user1 nil {:sync? false}))
   (<!! (k/get store :user2 nil {:sync? false}))
   (<!! (k/get store :config nil {:sync? false}))
-  
+
   ;; Clean up
   (<!! (k/dissoc store :user1 {:sync? false}))
   (<!! (k/dissoc store :user2 {:sync? false}))
   (<!! (k/dissoc store :config {:sync? false}))
-  
+
   (<!! (release store {:sync? false})))
