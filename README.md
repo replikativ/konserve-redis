@@ -46,6 +46,13 @@ For asynchronous execution take a look at the [konserve example](https://github.
                                (map byte (slurp input-stream)))
        {:sync? true})
 
+;; Multi-key atomic operations
+(k/multi-assoc store 
+               {:user1 {:name "Alice" :role "admin"}
+                :user2 {:name "Bob" :role "user"}
+                :config {:version "1.0"}}
+               {:sync? true})
+
 ```
 
 ## Commercial support

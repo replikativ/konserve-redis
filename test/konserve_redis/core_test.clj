@@ -1,10 +1,26 @@
 (ns konserve-redis.core-test
-  (:require [clojure.test :refer [deftest testing]]
+  (:require [clojure.test :refer [deftest testing is]]
             [clojure.core.async :refer [<!!]]
             [konserve.compliance-test :refer [compliance-test]]
-            [konserve-redis.core :refer [connect-store release delete-store]]))
+            [konserve-redis.core :refer [connect-store release delete-store redis-client]]))
 
-(def redis-spec {:uri "redis://localhost:6379/"})
+(def redis-spec {:uri "redis://localhost:6379/"
+                 :pool {}   ;; Use default pool for tests
+                 :ssl-fn :none  ;; Disable SSL for local testing
+                })
+
+(deftest redis-connection-test
+  (testing "Basic Redis connection"
+    (let [client (redis-client redis-spec)]
+      (is (= "PONG" (taoensso.carmine/wcar client (taoensso.carmine/ping))))
+    )))
+
+(deftest redis-store-connect-test
+  (testing "Konserve Redis store connection"
+    (let [store (connect-store redis-spec :opts {:sync? true})]
+      (is (not (nil? store)))
+      (release store {:sync? true})
+    )))
 
 (deftest redis-compliance-sync-test
   (let [redis-spec (assoc redis-spec :bucket "konserve-redis-sync-test")
