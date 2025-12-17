@@ -1,7 +1,9 @@
 (ns konserve-redis.core
   "Redis based konserve backend."
   (:require [konserve.impl.defaults :refer [connect-default-store]]
-            [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock PMultiWriteBackingStore -delete-store header-size -multi-write-blobs]]
+            [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock
+                                                  PMultiWriteBackingStore PMultiReadBackingStore
+                                                  -delete-store header-size]]
             [konserve.utils :refer [async+sync *default-sync-translation*]]
             [superv.async :refer [go-try-]]
             [taoensso.timbre :refer [info warn]]
@@ -43,6 +45,21 @@
 
 (defn delete [client key]
   (wcar client (car/del key)))
+
+(defn mget-objects
+  "Fetch multiple keys in a single MGET call.
+   Returns values in the same order as the input keys.
+   Missing keys return nil in their position."
+  [client keys]
+  (when (seq keys)
+    (wcar client (apply car/mget keys))))
+
+(defn mdelete
+  "Delete multiple keys in a single DEL call.
+   Returns the number of keys deleted."
+  [client keys]
+  (when (seq keys)
+    (wcar client (apply car/del keys))))
 
 (extend-protocol PBackingLock
   Boolean
@@ -185,7 +202,44 @@
                      (throw (ex-info "Redis transaction failed"
                                      {:type :not-supported
                                       :reason "Transaction failed"
-                                      :cause e}))))))))
+                                      :cause e})))))))
+
+  (-multi-delete-blobs [_ store-keys env]
+    (async+sync (:sync? env) *default-sync-translation*
+                (go-try-
+                 (if (empty? store-keys)
+                   {}
+                   (let [;; Check which keys exist before deleting
+                         values (mget-objects client store-keys)
+                         existing-keys (into #{}
+                                             (keep (fn [[k v]] (when v k))
+                                                   (map vector store-keys values)))
+                         ;; Delete all keys in one call
+                         _ (when (seq existing-keys)
+                             (mdelete client (vec existing-keys)))]
+                     ;; Return map showing which keys existed
+                     (reduce (fn [acc k]
+                               (assoc acc k (contains? existing-keys k)))
+                             {}
+                             store-keys))))))
+
+  PMultiReadBackingStore
+  (-multi-read-blobs [this store-keys env]
+    (async+sync (:sync? env) *default-sync-translation*
+                (go-try-
+                 (if (empty? store-keys)
+                   {}
+                   (let [;; MGET returns values in same order as keys
+                         values (mget-objects client store-keys)]
+                     ;; Build sparse map - only include keys with non-nil values
+                     (reduce (fn [acc [store-key value]]
+                               (if value
+                                 ;; Create RedisBlob with pre-populated fetched-object (eager loading)
+                                 (let [blob (RedisBlob. this store-key (atom {}) (atom value))]
+                                   (assoc acc store-key blob))
+                                 acc))
+                             {}
+                             (map vector store-keys values))))))))
 
 (defn connect-store [redis-spec & {:keys [opts]
                                    :as params}]
