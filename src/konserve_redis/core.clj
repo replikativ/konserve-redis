@@ -5,6 +5,7 @@
                                                   PMultiWriteBackingStore PMultiReadBackingStore
                                                   -delete-store header-size]]
             [konserve.utils :refer [async+sync *default-sync-translation*]]
+            [konserve.store :as store]
             [superv.async :refer [go-try-]]
             [taoensso.timbre :refer [info warn]]
             [taoensso.carmine :as car :refer [wcar]])
@@ -373,3 +374,27 @@
   (<!! (k/dissoc store :config {:sync? false}))
 
   (<!! (release store {:sync? false})))
+
+;; =============================================================================
+;; Multimethod Registration for konserve.store dispatch
+;; =============================================================================
+
+(defmethod store/connect-store :redis
+  [{:keys [uri pool ssl-fn] :as config}]
+  (let [redis-spec (dissoc config :backend :opts)
+        opts (:opts config)]
+    (connect-store redis-spec :opts opts)))
+
+(defmethod store/empty-store :redis
+  [config]
+  (store/connect-store config))
+
+(defmethod store/delete-store :redis
+  [{:keys [uri] :as config}]
+  (let [redis-spec (dissoc config :backend :opts)]
+    (delete-store redis-spec :opts (:opts config))))
+
+(defmethod store/release-store :redis
+  [_config store]
+  ;; Use sync mode for release (cleanup operations are typically fast)
+  (release store {:sync? true}))
