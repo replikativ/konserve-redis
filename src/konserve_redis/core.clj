@@ -386,45 +386,49 @@
 (def ^:const store-marker-key ".konserve-store-metadata")
 
 (defmethod store/connect-store :redis
-  [{:keys [uri pool ssl-fn] :as config}]
-  (let [redis-spec (dissoc config :backend :opts)
-        opts (or (:opts config) {:sync? true})
-        client (redis-client redis-spec)
-        marker-exists (exists? client store-marker-key)]
-    (when-not marker-exists
-      (throw (ex-info (str "Redis store does not exist at: " uri)
-                      {:uri uri :config config})))
-    (connect-store redis-spec :opts opts)))
+  [{:keys [uri pool ssl-fn] :as config} opts]
+  (async+sync (:sync? opts) *default-sync-translation*
+              (go-try-
+               (let [redis-spec (dissoc config :backend)
+                     client (redis-client redis-spec)
+                     marker-exists (exists? client store-marker-key)]
+                 (when-not marker-exists
+                   (throw (ex-info (str "Redis store does not exist at: " uri)
+                                   {:uri uri :config config})))
+                 (connect-store redis-spec :opts opts)))))
 
 (defmethod store/create-store :redis
-  [{:keys [uri pool ssl-fn] :as config}]
-  (let [redis-spec (dissoc config :backend :opts)
-        opts (or (:opts config) {:sync? true})
-        client (redis-client redis-spec)
-        marker-exists (exists? client store-marker-key)]
-    (when marker-exists
-      (throw (ex-info (str "Redis store already exists at: " uri)
-                      {:uri uri :config config})))
-    ;; Create marker key with timestamp
-    (put-object client store-marker-key
-                (.getBytes (str {:created-at (java.time.Instant/now)})
-                           "UTF-8"))
-    (connect-store redis-spec :opts opts)))
+  [{:keys [uri pool ssl-fn] :as config} opts]
+  (async+sync (:sync? opts) *default-sync-translation*
+              (go-try-
+               (let [redis-spec (dissoc config :backend)
+                     client (redis-client redis-spec)
+                     marker-exists (exists? client store-marker-key)]
+                 (when marker-exists
+                   (throw (ex-info (str "Redis store already exists at: " uri)
+                                   {:uri uri :config config})))
+                 ;; Create marker key with timestamp
+                 (put-object client store-marker-key
+                             (.getBytes (str {:created-at (java.time.Instant/now)})
+                                        "UTF-8"))
+                 (connect-store redis-spec :opts opts)))))
 
 (defmethod store/store-exists? :redis
-  [{:keys [uri] :as config}]
-  (let [opts (or (:opts config) {:sync? true})
-        redis-spec (dissoc config :backend :opts)
-        client (redis-client redis-spec)
-        exists (exists? client store-marker-key)]
-    (if (:sync? opts) exists (go exists))))
+  [{:keys [uri] :as config} opts]
+  (async+sync (:sync? opts) *default-sync-translation*
+              (go-try-
+               (let [redis-spec (dissoc config :backend)
+                     client (redis-client redis-spec)]
+                 (exists? client store-marker-key)))))
 
 (defmethod store/delete-store :redis
-  [{:keys [uri] :as config}]
-  (let [redis-spec (dissoc config :backend :opts)]
-    (delete-store redis-spec :opts (:opts config))))
+  [{:keys [uri] :as config} opts]
+  (async+sync (:sync? opts) *default-sync-translation*
+              (go-try-
+               (let [redis-spec (dissoc config :backend)]
+                 (delete-store redis-spec :opts opts)))))
 
 (defmethod store/release-store :redis
-  [_config store]
+  [_config store _opts]
   ;; Use sync mode for release (cleanup operations are typically fast)
   (release store {:sync? true}))
