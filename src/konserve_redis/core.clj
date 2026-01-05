@@ -151,6 +151,8 @@
     (if (:sync? env) nil (go-try- nil)))
   (-migrate [_ _migration-key _key-vec _serializer _read-handlers _write-handlers env]
     (if (:sync? env) nil (go-try- nil)))
+  (-handle-foreign-key [_ _migration-key _serializer _read-handlers _write-handlers env]
+    (if (:sync? env) nil (go-try- nil)))
   (-create-store [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 ;; not needed (setup externally)
@@ -165,7 +167,7 @@
                    (delete client key)))))
   (-keys [_ env]
     (async+sync (:sync? env) *default-sync-translation*
-                (go-try- (list-objects client))))
+                (go-try- (remove #{".konserve-store-metadata"} (list-objects client)))))
 
   PMultiWriteBackingStore
   (-multi-write-blobs
