@@ -14,17 +14,28 @@ Add to your dependencies:
 For asynchronous execution take a look at the [konserve example](https://github.com/replikativ/konserve#asynchronous-execution).
 
 ``` clojure
-(require '[konserve-redis.core :refer [connect-store]]
+(require '[konserve-redis.core]  ;; Registers the :redis backend
          '[konserve.core :as k])
 
-(def redis-spec
-  {:uri "redis://localhost:6379/"
+(def redis-config
+  {:backend :redis
+   :uri "redis://localhost:6379/"
    ;; Connection pools are used by default, use `:pool :none` to disable.
    :pool :none
    ;; Redis is assumed to require SSL, use `:ssl-fn :none` to disable.
-   :ssl-fn :none})
+   :ssl-fn :none
+   :opts {:sync? true}})
 
-(def store (connect-store redis-spec :opts {:sync? true}))
+;; Create a new store (same as connect for Redis - no creation step)
+(def store (k/create-store redis-config))
+
+;; Or connect to existing store
+;; (def store (k/connect-store redis-config))
+
+;; Check if store exists
+(k/store-exists? redis-config) ;; => true
+
+;; Use the store
 
 (k/assoc-in store ["foo" :bar] {:foo "baz"} {:sync? true})
 (k/get-in store ["foo"] nil {:sync? true})
@@ -52,6 +63,9 @@ For asynchronous execution take a look at the [konserve example](https://github.
                 :user2 {:name "Bob" :role "user"}
                 :config {:version "1.0"}}
                {:sync? true})
+
+;; Clean up
+(k/delete-store redis-config)
 
 ```
 
