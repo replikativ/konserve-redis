@@ -1,6 +1,7 @@
 (ns konserve-redis.core
   "Redis based konserve backend."
-  (:require [konserve.impl.defaults :refer [connect-default-store]]
+  (:require [clojure.core.async :refer [go]]
+            [konserve.impl.defaults :refer [connect-default-store]]
             [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock
                                                   PMultiWriteBackingStore PMultiReadBackingStore
                                                   -delete-store header-size]]
@@ -385,9 +386,17 @@
         opts (:opts config)]
     (connect-store redis-spec :opts opts)))
 
-(defmethod store/empty-store :redis
+(defmethod store/create-store :redis
   [config]
+  ;; Redis has no creation step - same as connect
   (store/connect-store config))
+
+(defmethod store/store-exists? :redis
+  [{:keys [uri] :as config}]
+  ;; Redis store "exists" if we can connect to the server
+  ;; For simplicity, always return true (connection will fail if unreachable)
+  (let [opts (or (:opts config) {:sync? true})]
+    (if (:sync? opts) true (go true))))
 
 (defmethod store/delete-store :redis
   [{:keys [uri] :as config}]
