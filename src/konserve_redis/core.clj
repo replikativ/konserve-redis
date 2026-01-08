@@ -385,7 +385,7 @@
 ;; Marker key to identify konserve store existence
 (def ^:const store-marker-key ".konserve-store-metadata")
 
-(defmethod store/connect-store :redis
+(defmethod store/-connect-store :redis
   [{:keys [uri pool ssl-fn] :as config} opts]
   (async+sync (:sync? opts) *default-sync-translation*
               (go-try-
@@ -395,9 +395,9 @@
                  (when-not marker-exists
                    (throw (ex-info (str "Redis store does not exist at: " uri)
                                    {:uri uri :config config})))
-                 (connect-store redis-spec :opts opts)))))
+                 (connect-store redis-spec)))))
 
-(defmethod store/create-store :redis
+(defmethod store/-create-store :redis
   [{:keys [uri pool ssl-fn] :as config} opts]
   (async+sync (:sync? opts) *default-sync-translation*
               (go-try-
@@ -411,9 +411,9 @@
                  (put-object client store-marker-key
                              (.getBytes (str {:created-at (java.time.Instant/now)})
                                         "UTF-8"))
-                 (connect-store redis-spec :opts opts)))))
+                 (connect-store redis-spec)))))
 
-(defmethod store/store-exists? :redis
+(defmethod store/-store-exists? :redis
   [{:keys [uri] :as config} opts]
   (async+sync (:sync? opts) *default-sync-translation*
               (go-try-
@@ -421,14 +421,14 @@
                      client (redis-client redis-spec)]
                  (exists? client store-marker-key)))))
 
-(defmethod store/delete-store :redis
+(defmethod store/-delete-store :redis
   [{:keys [uri] :as config} opts]
   (async+sync (:sync? opts) *default-sync-translation*
               (go-try-
                (let [redis-spec (dissoc config :backend)]
-                 (delete-store redis-spec :opts opts)))))
+                 (delete-store redis-spec)))))
 
-(defmethod store/release-store :redis
+(defmethod store/-release-store :redis
   [_config store _opts]
   ;; Use sync mode for release (cleanup operations are typically fast)
   (release store {:sync? true}))
