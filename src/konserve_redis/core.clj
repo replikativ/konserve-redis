@@ -429,6 +429,6 @@
                  (delete-store redis-spec)))))
 
 (defmethod store/-release-store :redis
-  [_config store _opts]
-  ;; Use sync mode for release (cleanup operations are typically fast)
-  (release store {:sync? true}))
+  [_config store opts]
+  ;; Release respecting caller's sync mode
+  (release store opts))
