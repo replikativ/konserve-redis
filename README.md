@@ -7,7 +7,7 @@ backend for [konserve](https://github.com/replikativ/konserve).
 
 Add to your dependencies:
 
-[![Clojars Project](http://clojars.org/io.replikativ/konserve-redis/latest-version.svg)](http://clojars.org/io.replikativ/konserve-redis)
+[![Clojars Project](http://clojars.org/org.replikativ/konserve-redis/latest-version.svg)](http://clojars.org/org.replikativ/konserve-redis)
 
 ### Configuration
 
