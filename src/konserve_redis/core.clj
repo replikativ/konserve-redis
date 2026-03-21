@@ -8,7 +8,7 @@
             [konserve.utils :refer [async+sync *default-sync-translation*]]
             [konserve.store :as store]
             [superv.async :refer [go-try-]]
-            [taoensso.timbre :refer [info warn]]
+            [replikativ.logging :as log]
             [taoensso.carmine :as car :refer [wcar]])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.util Arrays]))
@@ -162,7 +162,7 @@
   (-delete-store [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try-
-                 (info "Deleting the store is done by deleting all keys.")
+                 (log/info :konserve.redis/delete-store "Deleting the store by deleting all keys.")
                  (doseq [key (list-objects client)]
                    (delete client key)))))
   (-keys [_ env]
@@ -202,7 +202,7 @@
 
                    ;; Handle any transaction errors
                    (catch Exception e
-                     (warn "Redis transaction failed:" (.getMessage e))
+                     (log/warn :konserve.redis/transaction-failed {:message (.getMessage e)})
                      (throw (ex-info "Redis transaction failed"
                                      {:type :not-supported
                                       :reason "Transaction failed"
