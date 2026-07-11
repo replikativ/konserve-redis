@@ -3,6 +3,37 @@ version: 2.1
 orbs:
   tools: replikativ/clj-tools@0.0.30
 
+jobs:
+  # Cheap, always-on gate: load the namespace against the PINNED konserve, with no
+  # external service. A stale/incompatible konserve pin (e.g. one missing
+  # PReadMissSafe) fails here immediately.
+  smoke:
+    docker:
+      - image: clojure:temurin-21-tools-deps
+    steps:
+      - checkout
+      - run:
+          name: load namespace against pinned konserve
+          command: clojure -M -e "(require 'konserve-redis.core)(println :loaded)"
+
+  # Compliance tests against a Redis service container (reachable on localhost:6379,
+  # matching the test's redis://localhost:6379/ uri).
+  unittest:
+    docker:
+      - image: clojure:temurin-21-tools-deps
+      - image: redis:7
+    steps:
+      - checkout
+      - run:
+          name: wait for Redis on :6379
+          command: |
+            for i in $(seq 1 60); do (echo > /dev/tcp/localhost/6379) 2>/dev/null && exit 0; sleep 1; done
+            echo "Redis did not come up on :6379"; exit 1
+      - run:
+          name: run compliance tests
+          command: |
+            clojure -M:test -e "(require '[clojure.test :as t] 'konserve-redis.core-test)(let [{:keys [fail error]} (t/run-tests 'konserve-redis.core-test)](when (or (pos? fail) (pos? error)) (System/exit 1)))"
+
 workflows:
   build-test-and-deploy:
     jobs:
@@ -18,10 +49,8 @@ workflows:
           context: docker-deploy
           requires:
             - tools/setup
-#      - tools/unittest:
-#          context: docker-deploy
-#          requires:
-#            - tools/build
+      - smoke
+      - unittest
       - tools/deploy:
           context:
             - clojars-deploy
@@ -32,7 +61,8 @@ workflows:
           requires:
             - tools/build
             - tools/format
-#            - tools/unittest
+            - smoke
+            - unittest
       - tools/release:
           context:
             - github-token

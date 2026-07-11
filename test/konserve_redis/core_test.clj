@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.core.async :refer [<!!]]
             [konserve.compliance-test :refer [compliance-test]]
+            [konserve.impl.storage-layout :as sl]
             [konserve-redis.core :as redis]
             [konserve.store :as store])
   (:import [java.util UUID]))
@@ -47,3 +48,9 @@
         (compliance-test st))
       (<!! (redis/release st {:sync? false}))
       (<!! (store/delete-store spec {:sync? false})))))
+
+(deftest redis-read-miss-safe-marker-test
+  (testing "Redis backing implements PReadMissSafe (io-operation skips the EXISTS probe on reads)"
+    (let [store (redis/connect-store redis-spec :opts {:sync? true})]
+      (is (satisfies? sl/PReadMissSafe (:backing store)))
+      (redis/release store {:sync? true}))))

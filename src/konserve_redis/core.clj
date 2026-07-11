@@ -4,6 +4,7 @@
             [konserve.impl.defaults :refer [connect-default-store]]
             [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock
                                                   PMultiWriteBackingStore PMultiReadBackingStore
+                                                  PReadMissSafe store-key-not-found-ex
                                                   -delete-store header-size]]
             [konserve.utils :refer [async+sync *default-sync-translation*]]
             [konserve.store :as store]
@@ -96,6 +97,10 @@
                     ;; first access is always to header, after it is cached
                  (when-not @fetched-object
                    (reset! fetched-object (get-object (:client store) key)))
+                 ;; PReadMissSafe: GET returns nil for an absent key. Signal not-found;
+                 ;; io-operation's read-first path converts it to the caller's :not-found.
+                 (when (nil? @fetched-object)
+                   (throw (store-key-not-found-ex key)))
                  (Arrays/copyOfRange ^bytes @fetched-object (int 0) (int header-size)))))
   (-read-meta [_ meta-size env]
     (async+sync (:sync? env) *default-sync-translation*
@@ -244,6 +249,13 @@
                                  acc))
                              {}
                              (map vector store-keys values))))))))
+
+;; Redis reads are read-miss-safe: -create-blob only constructs a RedisBlob (no
+;; side effect), and -read-header throws store-key-not-found-ex when GET returns
+;; nil. So io-operation skips the -blob-exists? (EXISTS) probe — a read is one GET,
+;; and update-in/assoc-in/bassoc drop their probe too.
+(extend-type RedisStore
+  PReadMissSafe)
 
 (defn connect-store [redis-spec & {:keys [opts]
                                    :as params}]
