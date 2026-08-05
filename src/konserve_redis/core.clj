@@ -1,7 +1,7 @@
 (ns konserve-redis.core
   "Redis based konserve backend."
   (:require [clojure.core.async :refer [go]]
-            [konserve.impl.defaults :refer [connect-default-store]]
+            [konserve.impl.defaults :refer [connect-default-store normalize-store-config]]
             [konserve.impl.storage-layout :refer [PBackingStore PBackingBlob PBackingLock
                                                   PMultiWriteBackingStore PMultiReadBackingStore
                                                   PReadMissSafe store-key-not-found-ex
@@ -266,20 +266,27 @@
                                             :in-place? true
                                             :no-backup? true
                                             :lock-blob? true}
-                       :default-serializer :FressianSerializer
                        :buffer-size        (* 1024 1024)}
-                      ;; `:config` IS forwarded now. It used to be dissoc'd,
-                      ;; so the literal above always won and a caller could not
-                      ;; configure compression or encryption at all -- the
-                      ;; blob header carried a 0 whatever they asked for.
-                      ;; Merged onto the defaults rather than replacing them,
-                      ;; so a partial `:config` keeps the rest.
-                      (dissoc params :opts :config)
-                      {:config (merge {:sync-blob? true
-                                       :in-place? true
-                                       :no-backup? true
-                                       :lock-blob? true}
-                                      (:config params))})]
+                      (dissoc params :opts :config))
+        ;; `:config` IS forwarded now. It used to be dissoc'd, so the literal
+        ;; default always won and a caller could not configure compression or
+        ;; encryption at all -- the blob header carried a 0 whatever they
+        ;; asked for. Merged onto the defaults rather than replacing them, so
+        ;; a partial `:config` keeps the rest.
+        ;;
+        ;; Normalised BEFORE our own serializer default is filled: emitting
+        ;; `:default-serializer` would trip konserve's deprecation warning on
+        ;; every connect whatever the caller passed, and filling first would
+        ;; let it occupy the slot and silently drop a caller's older spelling.
+        config (-> config
+                   (assoc :config (merge {:sync-blob? true
+                                          :in-place? true
+                                          :no-backup? true
+                                          :lock-blob? true}
+                                         (:config params)))
+                   normalize-store-config
+                   (update-in [:config :encoding]
+                              #(merge {:serializer :FressianSerializer} %)))]
     (connect-default-store backing config)))
 
 (defn release
