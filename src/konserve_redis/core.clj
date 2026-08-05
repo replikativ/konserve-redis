@@ -268,7 +268,18 @@
                                             :lock-blob? true}
                        :default-serializer :FressianSerializer
                        :buffer-size        (* 1024 1024)}
-                      (dissoc params :opts :config))]
+                      ;; `:config` IS forwarded now. It used to be dissoc'd,
+                      ;; so the literal above always won and a caller could not
+                      ;; configure compression or encryption at all -- the
+                      ;; blob header carried a 0 whatever they asked for.
+                      ;; Merged onto the defaults rather than replacing them,
+                      ;; so a partial `:config` keeps the rest.
+                      (dissoc params :opts :config)
+                      {:config (merge {:sync-blob? true
+                                       :in-place? true
+                                       :no-backup? true
+                                       :lock-blob? true}
+                                      (:config params))})]
     (connect-default-store backing config)))
 
 (defn release
