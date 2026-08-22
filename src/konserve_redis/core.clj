@@ -6,6 +6,7 @@
                                                   PMultiWriteBackingStore PMultiReadBackingStore
                                                   PReadMissSafe store-key-not-found-ex
                                                   -delete-store header-size]]
+            [konserve.protocols :refer [PConditionalWrite PSelfConditionalWrite]]
             [konserve.utils :refer [async+sync *default-sync-translation*]]
             [konserve.store :as store]
             [superv.async :refer [go-try-]]
@@ -31,6 +32,45 @@
 
 (defn get-object [client key]
   (wcar client (car/get key)))
+
+(def ^:private cas-script
+  "Compare-and-set on a whole blob, evaluated by Redis.
+
+   `EVAL` runs atomically — Redis executes a script to completion before serving
+   anything else — so the comparison and the write are one step against every
+   client, which is what makes this backing's guarantee `:global`. It is also one
+   round trip, where WATCH/MULTI would need three and connection affinity that
+   `wcar` does not give us across konserve's separate read and write calls.
+
+   The comparison is on the EXACT bytes we read, not on a digest of them. A digest
+   would keep the payload small (`redis.sha1hex` is available), but a collision
+   here is a stale write silently passing its fence, and this is not the place to
+   trade correctness for bandwidth. Fencing is for mutable pointers, of which a
+   store has a handful.
+
+   ARGV[1] is the marker for `must not exist`; anything else is the expected value."
+  "local cur = redis.call('GET', KEYS[1])
+   if ARGV[1] == ARGV[3] then
+     if cur then return 0 end
+   elseif cur ~= ARGV[1] then
+     return 0
+   end
+   redis.call('SET', KEYS[1], ARGV[2])
+   return 1")
+
+(def ^:private absent-marker
+  "Sentinel for ARGV[1] meaning THE KEY MUST NOT EXIST. A byte string no stored
+   blob can equal: konserve blobs always begin with a header."
+  "konserve-redis/absent")
+
+(defn put-object-conditional
+  "SET `key` to `bytes` only if it currently holds `expected` — or, when `expected`
+   is `::absent`, only if it holds nothing. True on success, false on conflict."
+  [client ^String key ^bytes bytes expected]
+  (let [argv (if (= ::absent expected)
+               [absent-marker bytes absent-marker]
+               [expected bytes absent-marker])]
+    (= 1 (wcar client (apply car/eval cas-script 1 key argv)))))
 
 (defn exists? [client key]
   (pos? (wcar client (car/exists key))))
@@ -74,15 +114,40 @@
   (-sync [_ env]
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try- (let [{:keys [header meta value]} @data
-                               baos (ByteArrayOutputStream. output-stream-buffer-size)]
+                               baos (ByteArrayOutputStream. output-stream-buffer-size)
+                               expected-revision (:expected-revision env)]
                            (if (and header meta value)
                              (do
                                (.write baos header)
                                (.write baos meta)
                                (.write baos value)
-                               (put-object (:client store)
-                                           key
-                                           (.toByteArray baos))
+                               (let [bytes (.toByteArray baos)]
+                                 (if expected-revision
+                                   ;; FENCED. konserve has already compared the
+                                   ;; revision it read against the caller's; this
+                                   ;; closes the window BETWEEN that read and this
+                                   ;; write, which is the half no counter can do.
+                                   ;; Together they are the compare-and-set.
+                                   ;;
+                                   ;; What we read is remembered by `-read-header`
+                                   ;; and looked up here, because `-sync` runs on a
+                                   ;; DIFFERENT blob record than the read did —
+                                   ;; `update-blob` creates its own. No entry means
+                                   ;; no read happened, which for a fenced write is
+                                   ;; create-if-absent.
+                                   (let [cache (:read-cache store)
+                                         expected (get @cache key ::absent)]
+                                     (try
+                                       (when-not (put-object-conditional (:client store) key bytes expected)
+                                         (throw (ex-info (str "Conditional write rejected: the stored value is not "
+                                                              "the one this write was derived from.")
+                                                         {:type :konserve/revision-mismatch
+                                                          :key key
+                                                          :expected expected-revision})))
+                                       (finally
+                                         ;; Whatever happened, this read is spent.
+                                         (swap! cache dissoc key))))
+                                   (put-object (:client store) key bytes)))
                                (.close baos))
                              (throw (ex-info "Updating a row is only possible if header, meta and value are set."
                                              {:data @data})))
@@ -101,6 +166,13 @@
                  ;; io-operation's read-first path converts it to the caller's :not-found.
                  (when (nil? @fetched-object)
                    (throw (store-key-not-found-ex key)))
+                 ;; Remember it for a fenced `-sync`, and ONLY for one. The read
+                 ;; that precedes a conditional write carries `:expected-revision`
+                 ;; in its env, so we can tell — caching on every read would hold
+                 ;; the last-read bytes of every key a store ever touched, which
+                 ;; for a datahike-shaped workload is the whole index.
+                 (when (:expected-revision env)
+                   (swap! (:read-cache store) assoc key @fetched-object))
                  (Arrays/copyOfRange ^bytes @fetched-object (int 0) (int header-size)))))
   (-read-meta [_ meta-size env]
     (async+sync (:sync? env) *default-sync-translation*
@@ -133,7 +205,18 @@
     (async+sync (:sync? env) *default-sync-translation*
                 (go-try- (swap! data assoc :value blob)))))
 
-(defrecord RedisStore [client]
+(defrecord RedisStore [client read-cache]
+  ;; Redis evaluates the comparison — see `cas-script` — so konserve adds no
+  ;; mechanism of its own: no sidecar blob, no lock it would take. Declared rather
+  ;; than inferred from the domain, since reach and mechanism are separate
+  ;; questions.
+  PSelfConditionalWrite
+
+  PConditionalWrite
+  ;; `:global`. EVAL is atomic against every client of this Redis, not merely
+  ;; those sharing a filesystem or a heap.
+  (-conditional-write-domain [_] :global)
+
   PBackingStore
   (-create-blob [this store-key env]
     (async+sync (:sync? env) *default-sync-translation*
@@ -260,7 +343,7 @@
 (defn connect-store [redis-spec & {:keys [opts]
                                    :as params}]
   (let [complete-opts (merge {:sync? true} opts)
-        backing (RedisStore. (redis-client redis-spec))
+        backing (RedisStore. (redis-client redis-spec) (atom {}))
         config (merge {:opts               complete-opts
                        :config             {:sync-blob? true
                                             :in-place? true
@@ -298,7 +381,7 @@
 
 (defn delete-store [redis-spec & {:keys [opts]}]
   (let [complete-opts (merge {:sync? true} opts)
-        backing (RedisStore. (redis-client redis-spec))]
+        backing (RedisStore. (redis-client redis-spec) (atom {}))]
     (-delete-store backing complete-opts)))
 
 (comment
